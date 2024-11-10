@@ -4,76 +4,89 @@ import React, { useState, useCallback } from 'react';
 import { Camera, Upload, Trash2, Trophy, AlertCircle, CheckCircle2, Info, X } from 'lucide-react';
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { useWasteClassifier, getImageDataFromFile } from '@/components/waste-classifier-integration';
 
-type WasteAnalysis = {
-  type: string;
-  recyclable: boolean;
-  confidence: number;
-  disposalMethod: string;
-  environmentalImpact: string;
-};
+// type WasteAnalysis = {
+//   type: string;
+//   recyclable: boolean;
+//   confidence: number;
+//   disposalMethod: string;
+//   environmentalImpact: string;
+// };
 
-type UserStats = {
-  itemsRecycled: number;
-  points: number;
-  carbonSaved: number;
-  streak: number;
-};
+// type UserStats = {
+//   itemsRecycled: number;
+//   points: number;
+//   carbonSaved: number;
+//   streak: number;
+// };
 
-const mockWasteTypes = [
-  {
-    type: 'Plastic Bottle',
-    recyclable: true,
-    disposalMethod: 'Rinse and place in recycling bin',
-    environmentalImpact: 'Saves 2.5kg CO2 emissions',
-  },
-  {
-    type: 'Food Container',
-    recyclable: true,
-    disposalMethod: 'Clean thoroughly before recycling',
-    environmentalImpact: 'Reduces landfill waste by 0.5kg',
-  },
-  {
-    type: 'Food Waste',
-    recyclable: false,
-    disposalMethod: 'Dispose in compost if possible',
-    environmentalImpact: 'Can be composted to create nutrient-rich soil',
-  },
-  {
-    type: 'Aluminum Can',
-    recyclable: true,
-    disposalMethod: 'Crush if possible and recycle',
-    environmentalImpact: 'Saves 95% energy vs. new production',
-  },
-];
+// const mockWasteTypes = [
+//   {
+//     type: 'Plastic Bottle',
+//     recyclable: true,
+//     disposalMethod: 'Rinse and place in recycling bin',
+//     environmentalImpact: 'Saves 2.5kg CO2 emissions',
+//   },
+//   {
+//     type: 'Food Container',
+//     recyclable: true,
+//     disposalMethod: 'Clean thoroughly before recycling',
+//     environmentalImpact: 'Reduces landfill waste by 0.5kg',
+//   },
+//   {
+//     type: 'Food Waste',
+//     recyclable: false,
+//     disposalMethod: 'Dispose in compost if possible',
+//     environmentalImpact: 'Can be composted to create nutrient-rich soil',
+//   },
+//   {
+//     type: 'Aluminum Can',
+//     recyclable: true,
+//     disposalMethod: 'Crush if possible and recycle',
+//     environmentalImpact: 'Saves 95% energy vs. new production',
+//   },
+// ];
 
 const EcoVision = () => {
   const [selectedImage, setSelectedImage] = useState<string | null>(null);
-  const [analysis, setAnalysis] = useState<WasteAnalysis | null>(null);
+  const [analysis, setAnalysis] = useState<any>(null);
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [showTip, setShowTip] = useState(true);
-  const [stats, setStats] = useState<UserStats>({
+  const [stats, setStats] = useState({
     itemsRecycled: 0,
     points: 0,
     carbonSaved: 0,
-    streak: 0,
+    streak: 0
   });
 
-  const analyzeWaste = useCallback((file: File) => {
-    setIsAnalyzing(true);
-    
-    // Simulate API call
-    setTimeout(() => {
-      const randomWaste = mockWasteTypes[Math.floor(Math.random() * mockWasteTypes.length)];
-      const mockResults: WasteAnalysis = {
-        ...randomWaste,
-        confidence: Number((Math.random() * 20 + 80).toFixed(1)),
-      };
+  const { classifyImage, isLoading: modelLoading, error: modelError } = useWasteClassifier();
 
-      setAnalysis(mockResults);
-      setIsAnalyzing(false);
+  const handleImageUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-      if (mockResults.recyclable) {
+    try {
+      setIsAnalyzing(true);
+      setSelectedImage(URL.createObjectURL(file));
+
+      // Convert file to ImageData
+      const imageData = await getImageDataFromFile(file);
+      console.log(imageData)
+      // Classify the image
+      const result = await classifyImage(imageData);
+      console.log(result)
+      // Update analysis state
+      setAnalysis({
+        type: result.category,
+        recyclable: result.details.recyclable,
+        confidence: result.confidence,
+        disposalMethod: result.details.disposalMethod,
+        environmentalImpact: result.details.environmentalImpact
+      });
+
+      // Update stats if recyclable
+      if (result.details.recyclable) {
         setStats(prev => ({
           itemsRecycled: prev.itemsRecycled + 1,
           points: prev.points + 10,
@@ -81,16 +94,13 @@ const EcoVision = () => {
           streak: prev.streak + 1,
         }));
       }
-    }, 1500);
-  }, []);
-
-  const handleImageUpload = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (file) {
-      setSelectedImage(URL.createObjectURL(file));
-      analyzeWaste(file);
+    } catch (err) {
+      console.error('Error processing image:', err);
+      // Handle error appropriately
+    } finally {
+      setIsAnalyzing(false);
     }
-  }, [analyzeWaste]);
+  };
 
   return (
     <div className="min-h-screen bg-gradient-to-b from-green-50 to-white p-4 sm:p-6 md:p-8">
